@@ -1,55 +1,147 @@
-<<<<<<< HEAD
-# Test Project
+# 💬 Real-Time Chat Application
 
-## Repository Layout
-- `api/` – Express backend (messages, file uploads)
-- `app/` – React frontend scaffold
+A production-grade, real-time messaging application built with **React**, **Node.js**, **Express**, and **Pusher**. This project features a stunning glassmorphic UI, robust server-side search, media sharing capabilities, and a scalable Component/MVC architecture.
 
-## Prerequisites
-- Node.js 22+
-- pnpm (recommended) or npm
+> [!TIP]
+> This application demonstrates advanced frontend state orchestration and a decoupled backend architecture, making it highly scalable and easy to maintain.
 
-## Quick Start
-```bash
-# backend
-cd api
-cp env.example .env     # set Pusher credentials (optional)
-pnpm install
-pnpm dev                # starts on http://localhost:3001
+---
 
-# frontend
-cd ../app
-cp env.example .env     # set Pusher credentials (optional)
-pnpm install
-pnpm dev                # starts on http://localhost:3000
+## ✨ Key Features
+
+- **Real-Time Synchronization**: Instantaneous message broadcasting using Pusher WebSockets.
+- **Debounced Server-Side Search**: Highly optimized search functionality that queries the backend without overwhelming the API during rapid typing.
+- **Media Uploads**: Seamless image sharing using `multer` for multipart/form-data processing.
+- **Intelligent Chat UI**: iMessage-style dynamic chat bubbles that align automatically based on the sender's username.
+- **Premium Aesthetics**: A custom-designed, responsive, glassmorphic UI built from the ground up with pure CSS and modern typography (Inter).
+- **Fault-Tolerant Engine**: Graceful degradation if Pusher credentials are omitted; the app falls back to standard HTTP polling/refresh seamlessly.
+
+---
+
+## 🏛 System Architecture
+
+The application is split into two independent nodes: a React Client and an Express API. They communicate via REST for data operations and Pusher for real-time pub/sub events.
+
+```mermaid
+graph TD
+    Client[React Frontend] <-->|REST API| Server[Express Backend]
+    Server -->|Publishes Events| Pusher[Pusher WebSocket Server]
+    Pusher -->|Pushes Real-Time Updates| Client
+    Server <--> Data[(In-Memory Storage)]
+    Server <--> FS[Local File System /uploads]
 ```
 
-**Note:** No database setup required! The app uses in-memory storage for messages. Messages will be lost on server restart, but file uploads persist.
+---
 
-## Simple Challenges
+## 💻 Frontend Architecture
 
-1) **Real-time messages with Pusher (backend + frontend)**  
-   - Wire up Pusher on the backend to publish `new-message` and `message-deleted` events when messages are created/deleted.  
-   - On the frontend, initialize Pusher and subscribe to the same channel/events to live-update the message list (append on new-message, remove on message-deleted).  
-   - Add `.env` entries for Pusher keys (backend + frontend) and document how to run with them.
+The frontend (`/app`) is designed using a strict **Component & Service Pattern** to ensure high cohesion and low coupling.
 
-2) **Message search endpoint + realtime filter (backend + frontend)**  
-   - Add `GET /api/messages/search?q=term` (case-insensitive, newest first, non-empty `q`, max 100 results).  
-   - Add a search input in the UI that hits this endpoint with a 300ms debounce and shows loading/empty states.  
-   - When not searching, keep showing the live Pusher-powered feed from Challenge 1; when searching, show filtered results without breaking realtime updates once the search is cleared.
+### Component Tree
+We eliminated monolithic components in favor of a declarative, modular layout. 
 
-## Submission Guidelines
+```mermaid
+graph TD
+    App[App.js Layout Wrapper] --> useChatState((useChatState Hook))
+    App --> ChatHeader[ChatHeader]
+    App --> SearchBar[SearchBar]
+    App --> MessageList[MessageList]
+    App --> ChatInput[ChatInput]
+    
+    MessageList --> Bubble1[MessageBubble]
+    MessageList --> Bubble2[MessageBubble]
+    MessageList --> BubbleN[...]
+```
 
-After completing your challenges:
+### State Management & Services
+- **`services/api.js`**: An Axios-based HTTP client that centralizes all network logic. Components never call `axios` directly.
+- **`hooks/useChatState.js`**: The master orchestrator. It holds the core state (`messages`, `loading`), integrates with the API service to fetch data, and binds the Pusher event listeners to update the UI instantly when remote events occur.
 
-1. **Update README**: Document which challenges you completed and any additional setup required
-2. **Submit Your Work**:
-   - Add this repository to your GitHub account
-   - Send an email back with the repository link
-   - We will review your submission and get back to you
+---
 
-**Important Notes:**
-- **No AI Tools**: Please do not use AI tools like ChatGPT or Copilot for this assessment. We want to evaluate your own coding abilities and problem-solving skills.
-=======
-# react-node-test-assessment
->>>>>>> 94225b19fc2863d1403687fb12d940baa48775ce
+## ⚙️ Backend Architecture (MVC)
+
+The backend (`/api`) utilizes the **Model-View-Controller (MVC)** pattern to cleanly separate routing from business logic.
+
+```mermaid
+flowchart LR
+    Route[Express Router] -->|HTTP Request| Controller[messageController.js]
+    Controller <-->|Data Manipulation| Model[Message.js]
+    Controller -->|File Streams| Upload[multer middleware]
+    Controller -->|Triggers| Pusher[pusher.js utility]
+```
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/messages` | Retrieves paginated chat history. |
+| `GET` | `/api/messages/search?q=` | Server-side text search for messages. |
+| `POST` | `/api/messages` | Creates a standard text message. |
+| `POST` | `/api/messages/with-image` | Multipart upload for text + image. |
+| `DELETE`| `/api/messages/:id` | Deletes a message by ID. |
+
+---
+
+## 🔄 Real-Time Synchronization Lifecycle
+
+The real-time engine ensures that when one client performs an action, all other connected clients reflect that action immediately without needing to refresh.
+
+```mermaid
+sequenceDiagram
+    participant Client A
+    participant Express Server
+    participant DB as In-Memory DB
+    participant Pusher
+    participant Client B
+
+    Client A->>Express Server: POST /api/messages
+    Express Server->>DB: Save Message
+    Express Server->>Pusher: Trigger 'new-message' event
+    Express Server-->>Client A: 201 Created (HTTP Response)
+    
+    Note over Client A: Client A updates local state via HTTP response
+    
+    Pusher-->>Client B: WebSocket Event: 'new-message'
+    Note over Client B: Client B updates local React state instantly
+```
+
+> [!WARNING]
+> **Race Condition Prevention**
+> If a user is actively typing in the `SearchBar`, the frontend intelligent hook (`useChatState`) intercepts incoming Pusher events and prevents them from polluting the user's specific search results.
+
+---
+
+## 🚀 Development & Setup
+
+### Prerequisites
+- Node.js (v14+)
+- npm or yarn
+- A free [Pusher](https://pusher.com/) account (optional, but required for real-time functionality).
+
+### 1. Backend Setup
+1. Navigate to the `api` directory: `cd api`
+2. Install dependencies: `npm install`
+3. Create a `.env` file based on the example:
+   ```env
+   PORT=3001
+   PUSHER_APP_ID=your_app_id
+   PUSHER_KEY=your_key
+   PUSHER_SECRET=your_secret
+   PUSHER_CLUSTER=your_cluster
+   ```
+4. Start the development server: `npm run dev`
+
+### 2. Frontend Setup
+1. Navigate to the `app` directory: `cd app`
+2. Install dependencies: `npm install`
+3. Create a `.env` file based on the example:
+   ```env
+   REACT_APP_API_URL=http://localhost:3001
+   REACT_APP_PUSHER_KEY=your_key
+   REACT_APP_PUSHER_CLUSTER=your_cluster
+   ```
+4. Start the React development server: `npm start`
+
+> [!IMPORTANT]
+> The React app runs on `http://localhost:3000` and automatically proxies requests to the backend API running on `http://localhost:3001`. Ensure both are running concurrently.
